@@ -1,9 +1,26 @@
 use rand::Rng;
+use std::thread;
+use std::time::Duration;
+use crossterm::terminal::{self, ClearType};
+use std::io;
+
+fn get_console_size() -> Result<(u16, u16), io::Error> {
+    terminal::enable_raw_mode()?;
+    let size = terminal::size()?;
+    terminal::disable_raw_mode()?;
+    Ok(size)
+}
 
 fn main() {
     println!("Hello, world!");
-    let board = Board::random();
-    board.print();
+    terminal::enable_raw_mode().unwrap();
+    let (height, width) = get_console_size().unwrap();
+    terminal::disable_raw_mode().unwrap();
+    loop {
+        let board = Board::random(width as i32, height as i32);
+        board.print();
+        thread::sleep(Duration::from_secs(1));
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -15,17 +32,17 @@ struct Cell {
 #[derive(Debug)]
 struct Board {
     cells: Vec<Cell>,
+    x: i32,
+    y: i32,
 }
 
 impl Board {
-    fn random() -> Board {
+    fn random(rows: i32, cols: i32) -> Board {
         let mut rng = rand::thread_rng();
-        let row = [0,1,2];
-        let col = [0,1,2];
         let mut cells: Vec<Cell> = Vec::new();
 
-        for x in row {
-            for y in col {
+        for x in 0..rows {
+            for y in 0..cols {
                 let cell = Cell {x: x, y: y};
                 let add_cell: bool = rng.gen();
                 if add_cell {
@@ -34,7 +51,7 @@ impl Board {
             }
         }
 
-        Board {cells: cells}
+        Board {cells: cells, x: rows, y: cols}
     }
 
     fn neighbours(&self, cell: &Cell) -> Vec<Cell> {
@@ -45,39 +62,23 @@ impl Board {
         }).map(|c| c.clone()).collect()
     }
 
-    fn ranges(&self) -> [Cell; 2] {
-        let min_x = self.cells.iter().map(|c| c.x).min().unwrap_or(0);
-        let min_y = self.cells.iter().map(|c| c.y).min().unwrap_or(0);
-        let max_x = self.cells.iter().map(|c| c.x).max().unwrap_or(0);
-        let max_y = self.cells.iter().map(|c| c.y).max().unwrap_or(0);
-
-        [
-            Cell{x: min_x, y: min_y},
-            Cell{x: max_x, y: max_y}
-        ]
-    }
-
     fn print(&self) {
         print!("\x1B[2J\x1B[1;1H");
         println!("");
 
-        let ranges = self.ranges();
-        let n = (ranges[1].x - ranges[0].x).abs() as usize;
-        let m = (ranges[1].y - ranges[0].y).abs() as usize;
-
-        let mut array: Vec<Vec<bool>> = vec![vec![false; m + 1]; n + 1];
+        let mut array: Vec<Vec<bool>> = vec![vec![false; self.x as usize]; self.y as usize];
 
         for cell in &self.cells {
             array[cell.x as usize][cell.y as usize] = true;
         }
-        // Print the initialized array
+
         for row in &array {
             print!(" ");
             for col in row {
                 if *col {
                     print!("*");
                 } else {
-                    print!(".");
+                    print!(" ");
                 }
             }
             println!("");
@@ -113,7 +114,7 @@ mod tests {
     fn neighbours_of_cell() {
         let cell  = Cell { x: 1, y: 2 };
         let cells = vec![Cell{x: 4, y: 9}, Cell{x: 1, y: 1}, Cell {x: 1, y: 2}];
-        let board = Board { cells: cells };
+        let board = Board { cells: cells, x: 10, y: 10 };
         let expected_cells = vec![Cell{x: 1, y: 1}];
 
         assert_eq!(expected_cells, board.neighbours(&cell));
@@ -123,7 +124,7 @@ mod tests {
     fn is_underpopulated() {
         let cell  = Cell { x: 1, y: 2 };
         let cells = vec![Cell{x: 1, y: 1}, Cell {x: 1, y: 2}];
-        let board = Board { cells: cells };
+        let board = Board { cells: cells, x: 10, y: 10 };
 
         assert_eq!(true, cell.underpopulated(&board));
     }
@@ -138,7 +139,7 @@ mod tests {
             Cell{x: 2, y: 2},
             Cell{x: 0, y: 2},
         ];
-        let board = Board { cells: cells };
+        let board = Board { cells: cells, x: 10, y: 10 };
 
         assert_eq!(true, cell.overpopulated(&board));
     }
@@ -152,7 +153,7 @@ mod tests {
             Cell{x: 1, y: 3},
             Cell{x: 2, y: 2},
         ];
-        let board = Board { cells: cells };
+        let board = Board { cells: cells, x: 10, y: 10 };
 
         assert_eq!(true, cell.stays_alive(&board));
     }
@@ -166,16 +167,8 @@ mod tests {
             Cell{x: 1, y: 3},
             Cell{x: 2, y: 2},
         ];
-        let board = Board { cells: cells };
+        let board = Board { cells: cells, x: 10, y: 10 };
 
         assert_eq!(true, cell.reproduce(&board));
-    }
-
-    #[test]
-    fn generate_random_board() {
-        let board = Board::random();
-
-        dbg!(&board);
-        assert_eq!([Cell{x: 0, y: 0}, Cell{x: 2, y: 2}], board.ranges());
     }
 }
