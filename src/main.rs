@@ -14,12 +14,16 @@ fn get_console_size() -> Result<(u16, u16), io::Error> {
 fn main() {
     println!("Hello, world!");
     terminal::enable_raw_mode().unwrap();
-    let (height, width) = get_console_size().unwrap();
+    let (width, height) = get_console_size().unwrap();
     terminal::disable_raw_mode().unwrap();
+    let mut board = Board::random(width as i32, height as i32);
+    let mut count: i32 = 0;
     loop {
-        let board = Board::random(width as i32, height as i32);
+        board = Board::next_board(&board);
+        println!("NEXT GENERATION {}", count);
         board.print();
         thread::sleep(Duration::from_secs(1));
+        count += 1;
     }
 }
 
@@ -41,8 +45,8 @@ impl Board {
         let mut rng = rand::thread_rng();
         let mut cells: Vec<Cell> = Vec::new();
 
-        for x in 0..rows {
-            for y in 0..cols {
+        for x in 0..cols {
+            for y in 0..rows {
                 let cell = Cell {x: x, y: y};
                 let add_cell: bool = rng.gen();
                 if add_cell {
@@ -52,6 +56,23 @@ impl Board {
         }
 
         Board {cells: cells, x: rows, y: cols}
+    }
+
+    fn next_board(board: &Board) -> Board {
+        let mut cells: Vec<Cell> = Vec::new();
+
+        println!("{}, {}", board.x, board.y);
+        for x in 0..board.x {
+            for y in 0..board.y {
+                let cell = Cell {x: x, y: y};
+                let add_cell: bool = cell.in_next_gen(board);
+                if add_cell {
+                    cells.push(cell);
+                }
+            }
+        }
+
+        Board {cells: cells, x: board.x, y: board.y}
     }
 
     fn neighbours(&self, cell: &Cell) -> Vec<Cell> {
@@ -66,14 +87,13 @@ impl Board {
         print!("\x1B[2J\x1B[1;1H");
         println!("");
 
-        let mut array: Vec<Vec<bool>> = vec![vec![false; self.x as usize]; self.y as usize];
+        let mut array: Vec<Vec<bool>> = vec![vec![false; self.y as usize]; self.x as usize];
 
         for cell in &self.cells {
-            array[cell.x as usize][cell.y as usize] = true;
+            array[cell.y as usize][cell.x as usize] = true;
         }
 
         for row in &array {
-            print!(" ");
             for col in row {
                 if *col {
                     print!("*");
@@ -83,8 +103,6 @@ impl Board {
             }
             println!("");
         }
-
-        println!("");
     }
 }
 
@@ -103,6 +121,11 @@ impl Cell {
 
     fn reproduce(&self, board: &Board) -> bool {
         board.neighbours(self).len() == 3
+    }
+
+    fn in_next_gen(&self, board: &Board) -> bool {
+        !self.underpopulated(board) && !self.overpopulated(board) &&
+            (self.stays_alive(board) || self.reproduce(board))
     }
 }
 
